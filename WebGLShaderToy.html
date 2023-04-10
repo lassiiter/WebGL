@@ -1,0 +1,233 @@
+<html>
+
+<head></head>
+
+<body>
+    <doctype html="">
+
+        <title>WebGL Shadertoy</title>
+
+        <script id="vertexShader" type="x-shader/x-vertex">
+    attribute vec3 pos;
+    attribute vec4 clr;
+    
+    uniform mat4 trans;
+
+    varying vec4 fColor;
+    varying vec2 v_texcoord;
+
+    void main()
+    {
+        gl_Position = trans * vec4(pos,1);
+        fColor = clr;
+    }
+    </script>
+
+        <script id="fragmentShader" type="x-shader/x-fragment">
+    precision mediump float;
+    uniform vec2 iResolution;
+    uniform float iTime;
+    
+    varying vec4 fColor;
+    varying vec2 v_texcoord;
+
+    float sdfCircle(vec2 p, float size)
+    {
+        return distance(p/3., vec2(size,0.));
+    }
+    void main()
+    {
+        vec2 uv = gl_FragCoord.xy/iResolution;
+        //Offset the UV so that it sits in the middle of the screen
+        uv -= 0.5;
+        //Adjust the X value of the UV based on the resolution of the screen
+        uv.x *= (iResolution.x / iResolution.y);
+        
+        vec3 uvCol = vec3(length(uv),length(uv),length(uv));
+        vec3 uvCol2 = 1. - uvCol*5.5;
+
+        vec3 col = uvCol;
+
+        float n = sdfCircle(uv,sin(iTime)/50.);
+
+        col *= smoothstep(.05,.051,n);
+        vec3 mask = vec3(1,1,1);
+        mask *= 1. - smoothstep(.05,.051,n);
+        vec3 finalColor =  col + mask*uvCol2;
+
+        gl_FragColor = vec4(finalColor,1);
+    }
+    </script>
+
+        <script type="text/javascript">
+            var time = 1;
+            window.onload = function () {
+                // Initialize WebGL
+                canvas = document.getElementById("mycanvas");
+                gl = canvas.getContext("webgl");
+
+                // Set the output resolution and viewport
+                // We can change the output resolution later on.
+                // This is helpful, for example, when the user changes the size of the window.
+                const pixelRatio = window.devicePixelRatio || 1;
+                canvas.width = pixelRatio * canvas.clientWidth;
+                canvas.height = pixelRatio * canvas.clientHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+
+                // Initialize other WebGL states
+                gl.clearColor(1, 1, 1, 0);
+
+                ///////////////////////////////////////////////////////////////////////
+                // Initialize the vertex buffer objects
+                // We can update the contents of the vertex buffer objects anytime.
+                // We do NOT need to create them again.
+
+                var positions = [
+                -1, -1,  // first triangle
+                 1, -1,
+                -1,  1,
+                -1,  1,  // second triangle
+                 1, -1,
+                 1,  1,
+                ];
+
+                var colors = [
+                    1, 0, 1, 1,
+                    0, 1, 0, 1,
+                    1, 0, 0, 1,
+                    1, 0, 0, 1,
+                    0, 1, 0, 1,
+                    0, 1, 1, 1
+                ];
+
+
+                var position_buffer = gl.createBuffer();
+
+                gl.bindBuffer(
+                    gl.ARRAY_BUFFER,
+                    position_buffer);
+
+                gl.bufferData(
+                    gl.ARRAY_BUFFER,
+                    new Float32Array(positions),
+                    gl.STATIC_DRAW);
+
+                var color_buffer = gl.createBuffer();
+
+                gl.bindBuffer(
+                    gl.ARRAY_BUFFER,
+                    color_buffer);
+
+                gl.bufferData(
+                    gl.ARRAY_BUFFER,
+                    new Float32Array(colors),
+                    gl.STATIC_DRAW);
+
+                ///////////////////////////////////////////////////////////////////////
+                // Compile the vertex and fragment shaders into a program
+                // We can modify the shader source code and recompile later,
+                // though typically a WebGL application would compile its shaders only once.
+                // An application can have multiple shader programs and bind a different
+                // shader program for rendering different objects in a scene.
+
+                const vs_source = document.getElementById('vertexShader').text;
+
+                const vs = gl.createShader(gl.VERTEX_SHADER);
+                gl.shaderSource(vs, vs_source);
+                gl.compileShader(vs);
+
+                if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+                    console.log(gl.getShaderInfoLog(vs));
+                    gl.deleteShader(vs);
+                }
+
+                const fs_source = document.getElementById('fragmentShader').text;
+
+                const fs = gl.createShader(gl.FRAGMENT_SHADER);
+                gl.shaderSource(fs, fs_source);
+                gl.compileShader(fs);
+
+                if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+                    console.log(gl.getShaderInfoLog(fs));
+                    gl.deleteShader(fs);
+                }
+
+                prog = gl.createProgram();
+                gl.attachShader(prog, vs);
+                gl.attachShader(prog, fs);
+                gl.linkProgram(prog);
+
+                if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                    console.log(gl.getProgramInfoLog(prog));
+                }
+
+                ///////////////////////////////////////////////////////////////////////
+                // Update shader uniform variables
+                // Before we render, we must set the values of the uniform variables.
+                // The uniform variables can be updated as frequently as needed.
+
+                var m = gl.getUniformLocation(prog, 'trans');
+
+                var matrix = [
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1];
+
+                gl.useProgram(prog);
+                gl.uniformMatrix4fv(m, false, matrix);
+                
+                //resolution
+                var iResolution = [canvas.clientWidth,canvas.clientHeight]
+                const iR = gl.getUniformLocation(prog, "iResolution");
+                gl.uniform2fv(iR, iResolution);
+
+                ///////////////////////////////////////////////////////////////////////
+                // Set the vertex buffers used for rendering
+                // Before we render, we must specify which vertex attributes are used
+                // and which vertex buffer objects contain their data.
+                // Note that different objects can use different sets of attributes
+                // stored in different vertex buffer objects.
+
+                var p = gl.getAttribLocation(prog, 'pos');
+                gl.bindBuffer(gl.ARRAY_BUFFER, position_buffer);
+                gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(p);
+
+                var c = gl.getAttribLocation(prog, 'clr');
+                gl.bindBuffer(gl.ARRAY_BUFFER, color_buffer);
+                gl.vertexAttribPointer(c, 4, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(c);
+
+                ///////////////////////////////////////////////////////////////////////
+                // Render the scene
+                // Now that everything is ready, we can render the scene.
+                // Rendering begins with clearing the image.
+                // Every time the scene changes, we must render again.
+                
+                // allows for the use of iTime
+                requestAnimationFrame(render);
+                function render(time) {
+                    time *= 0.001;  // convert to seconds
+                    const timeLocation = gl.getUniformLocation(prog, "iTime");
+                    gl.uniform1f(timeLocation, time);
+                    requestAnimationFrame(render)
+
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                    gl.useProgram(prog);
+                    gl.drawArrays(gl.TRIANGLES, 0, 6);
+                }
+            }
+        </script>
+        <style>
+            #mycanvas {
+                width: 100%;
+                height: 100%;
+                margin: 0%;
+            }
+        </style>
+        <canvas id="mycanvas"></canvas>
+    </doctype>
+</body>
+
+</html>
